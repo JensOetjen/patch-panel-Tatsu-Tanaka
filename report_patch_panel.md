@@ -122,8 +122,9 @@
 すでに実装されていたサブコマンドは、./lib/patch_panel.rbでメソッドが実行されていたが、同様に実装してしまうと、サブコマンドを入力した端末と出力する端末が異なってしまい扱いづらくなる。
 そのため、./bin/patch_panelでターミナルの表示を行う。
 他のサブコマンドの記述を参考にした。
-[./lib/patch_panel.rb](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/lib/patch_panel.rb)内で実装した`list_patch`メソッドを呼び出し、返り値を`patchlist'に入れる。
+[./lib/patch_panel.rb](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/lib/patch_panel.rb)内で実装した`list_patch`メソッドを呼び出し、返り値を`patchlist`に入れる。
 [./lib/patch_panel.rb](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/lib/patch_panel.rb)内で実装した`list_patch`メソッドは以下である。
+
 ```
   def list_patch(dpid)
     list = Array.new()
