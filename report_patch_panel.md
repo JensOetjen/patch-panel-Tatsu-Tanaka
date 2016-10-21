@@ -132,7 +132,7 @@
     list << @mirror_patch
     return list
   end
-``
+```
 パッチリストやミラーリングの情報は./lib/patch_panel.rbのインスタンス変数に保存されているため、@patch,@mirror_patchを配列`list`に入れて返すメソッドを用意した。
 
 /bin/patch_panelにおいて、@patch,@mirror_patchそれぞれに対して、printメソッドを用いて、パッチ情報とミラーリング情報をターミナルに出力する。
