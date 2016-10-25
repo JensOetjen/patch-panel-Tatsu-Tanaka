@@ -213,7 +213,7 @@ vhost ('host3') {
 そこで、[./lib/patch_panel.rb](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/lib/patch_panel.rb)の以下の部分で変更を加えた。
 ```
   def create_mirror_patch(dpid, monitor_port, mirror_port)
-    if add_mirror_flow_entries dpid, monitor_port, mirror_port == true then
+    if add_mirror_flow_entries dpid, monitor_port, mirror_port then
      @mirror_patch[dpid] << [monitor_port, mirror_port]
     end
   end
