@@ -22,7 +22,7 @@
 監視されるポートを「モニターポート」と呼び、コピーが流れてくるポートを「ミラーポート」という。
 
 ミラーリングを作成するサブコマンド`create_mirror`を用意するために、[./bin/patch_panel](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/bin/patch_panel)に以下の実装を行う。
-```
+```ruby
   desc 'Creates a mirror patch'
   arg_name 'dpid port mirror'
   command :create_mirror do |c|
@@ -47,7 +47,7 @@
 ミラーリングの機能を提供するメソッドを[./lib/patch_panel.rb](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/lib/patch_panel.rb)に追加する。
 ####create_mirror_patchメソッド
 以下のメソッド`create_mirror_patch`を用意する。
-```
+```ruby
   def create_mirror_patch(dpid, monitor_port, mirror_port)
     add_mirror_flow_entries dpid, monitor_port, mirror_port
     @mirror_patch[dpid] << [monitor_port, mirror_port]
@@ -59,7 +59,7 @@
 
 ####add_mirror_flow_entriesメソッド
 以下の、一つのミラーパッチを書き込む`add_mirror_flow_entries`プライベートメソッドを呼び出す。
-```
+```ruby
   def add_mirror_flow_entries(dpid, monitor_port, mirror_port)
     source_port = nil
     @patch[dpid].each do |port_a, port_b|
@@ -97,7 +97,7 @@
 ###2. パッチとポートミラーリングの一覧
 パッチとポートミラーリングの状態を表示するサブコマンド`list`を用意した。
 [./bin/patch_panel](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/bin/patch_panel)に以下の実装を行う。
-```
+```ruby
   desc 'Prints patch and mirror patch'
   arg_name 'dpid patchlist patch mirror_patch'
   command :list do |c|
@@ -125,7 +125,7 @@
 [./lib/patch_panel.rb](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/lib/patch_panel.rb)内で実装した`list_patch`メソッドを呼び出し、返り値を`patchlist`に入れる。
 [./lib/patch_panel.rb](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/lib/patch_panel.rb)内で実装した`list_patch`メソッドは以下である。
 
-```
+```ruby
   def list_patch(dpid)
     list = Array.new()
     list << @patch
@@ -146,7 +146,7 @@ ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ ./bin/patch_panel list 0x
 ```
 ポート、1と2がセットでパッチとして登録されておらず、それぞれが単独でハッシュに登録されている。
 @patchに正しく二次元配列として格納されていないと考えられるので、[./lib/patch_panel.rb](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/lib/patch_panel.rb)内のstartハンドラを以下のように変更した。
-```
+```ruby
   def start(_args)
     @patch = Hash.new { |hash,key| hash[key]=[] }
     @mirror_patch = Hash.new { |hash,key| hash[key]=[] }
@@ -155,7 +155,7 @@ ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ ./bin/patch_panel list 0x
 ```
 [このページ](http://simanman.hatenablog.com/entry/2013/09/24/211044)を参考に、ハッシュのデフォルト値を配列にして初期化した。
 またcreate_patchメソッドも以下のように変更した。
-```
+```ruby
   def create_patch(dpid, port_a, port_b)
     add_flow_entries dpid, port_a, port_b
     @patch[dpid] << [port_a, port_b].sort
@@ -200,7 +200,7 @@ Packets received:
 ```
 host1,host2でそれぞれ送受信ができていることと、ミラーポートに接続されているhost3に、モニターポートで送受信されたパケット情報を受け取っていることを確認できた。
 ミラーポートに接続されているhost3は自分宛てのパケットではないためパケットを破棄してしまうため、[./lib/patch_panel.conf](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/patch_panel.conf)において
-```
+```ruby
 vhost ('host3') { 
   ip '192.168.0.3' 
   promisc true
@@ -211,7 +211,7 @@ vhost ('host3') {
 ## 問題点
 パッチを作成する前にミラーリングを行うことはできない。しかし、パッチを作成する前にミラーリングを実行した後、ポートミラーリングの一覧を表示すると、実際にはミラーリングできていないにも関わらず一覧にミラーパッチが表示されてしまう。
 そこで、[./lib/patch_panel.rb](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/lib/patch_panel.rb)の以下の部分で変更を加えた。
-```
+```ruby
   def create_mirror_patch(dpid, monitor_port, mirror_port)
     if add_mirror_flow_entries dpid, monitor_port, mirror_port then
      @mirror_patch[dpid] << [monitor_port, mirror_port]
@@ -226,7 +226,7 @@ add_mirror_flow_entriesメソッドではモニターポートがすでにパッ
 ### ミラーリングの解除
 一度設定したミラーリングの解除を行うコマンドを実装した。
 ミラーリングを解除するサブコマンド`delete_mirror`を用意するために、[./bin/patch_panel](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/bin/patch_panel)に以下の実装を行う。
-```
+```ruby
   desc 'Deletes a mirror patch'
   arg_name 'dpid monitor_port mirror_port'
   command :delete_mirror do |c|
@@ -249,7 +249,7 @@ add_mirror_flow_entriesメソッドではモニターポートがすでにパッ
 ミラーリングの機能を提供するメソッドを[./lib/patch_panel.rb](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/lib/patch_panel.rb)に追加する。
 ####delete_mirror_patchメソッド
 以下のメソッド`delete_mirror_patch`を用意する。
-```
+```ruby
   def delete_mirror_patch(dpid, monitor_port, mirror_port)
     delete_mirror_flow_entries dpid, monitor_port, mirror_port
     @mirror_patch[dpid].delete([monitor_port, mirror_port])
@@ -261,7 +261,7 @@ add_mirror_flow_entriesメソッドではモニターポートがすでにパッ
 
 ####delete_mirror_flow_entriesメソッド
 以下の`delete_mirror_flow_entries`プライベートメソッドを用意する。
-```
+```ruby
   def delete_mirror_flow_entries(dpid, monitor_port, mirror_port)
     source_port = nil
     flag = true;
