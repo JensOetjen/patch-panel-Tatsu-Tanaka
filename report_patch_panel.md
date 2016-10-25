@@ -260,7 +260,7 @@ add_mirror_flow_entriesメソッドではモニターポートがすでにパッ
 
 
 ####delete_mirror_flow_entriesメソッド
-以下の`add_mirror_flow_entries`プライベートメソッドを用意する。
+以下の`delete_mirror_flow_entries`プライベートメソッドを用意する。
 ```
   def delete_mirror_flow_entries(dpid, monitor_port, mirror_port)
     source_port = nil
