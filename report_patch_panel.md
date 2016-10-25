@@ -208,6 +208,136 @@ vhost ('host3') {
 ```
 と記述し、host3のみをネットワークを流れるすべてのパケットを受信して読み込むモードに変更した。
 
+## 問題点
+パッチを作成する前にミラーリングを行うことはできない。しかし、パッチを作成する前にミラーリングを実行した後、ポートミラーリングの一覧を表示すると、実際にはミラーリングできていないにも関わらず一覧にミラーパッチが表示されてしまう。
+そこで、[./lib/patch_panel.rb](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/lib/patch_panel.rb)の以下の部分で変更を加えた。
+```
+  def create_mirror_patch(dpid, monitor_port, mirror_port)
+    if add_mirror_flow_entries dpid, monitor_port, mirror_port == true then
+     @mirror_patch[dpid] << [monitor_port, mirror_port]
+    end
+  end
+```
+ハッシュに値を入れるのは、add_mirror_flow_entriesメソッドの返り値がtrueのときのみにした。
+add_mirror_flow_entriesメソッドではモニターポートがすでにパッチされていない場合、返り値をfalseとしている。
+
+## 発展課題
+発展課題として以下の機能を追加した。
+### ミラーリングの解除
+一度設定したミラーリングの解除を行うコマンドを実装した。
+ミラーリングを解除するサブコマンド`delete_mirror`を用意するために、[./bin/patch_panel](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/bin/patch_panel)に以下の実装を行う。
+```
+  desc 'Deletes a mirror patch'
+  arg_name 'dpid monitor_port mirror_port'
+  command :delete_mirror do |c|
+    c.desc 'Location to find socket files'
+    c.flag [:S, :socket_dir], default_value: Trema::DEFAULT_SOCKET_DIR
+
+    c.action do |_global_options, options, args|
+      dpid = args[0].hex
+      monitor_port = args[1].to_i
+      mirror_port = args[2].to_i
+      Trema.trema_process('PatchPanel', options[:socket_dir]).controller.
+        delete_mirror_patch(dpid, monitor_port, mirror_port)
+    end
+  end
+```
+サブコマンド実行時は、端末上で以下のコマンドを入力する。
+```
+./bin/patch_panel delete_mirror (datapath ID) (モニターポート番号)　(ミラーポート番号)
+```
+ミラーリングの機能を提供するメソッドを[./lib/patch_panel.rb](https://github.com/handai-trema/patch-panel-Tatsu-Tanaka/blob/master/lib/patch_panel.rb)に追加する。
+####delete_mirror_patchメソッド
+以下のメソッド`delete_mirror_patch`を用意する。
+```
+  def delete_mirror_patch(dpid, monitor_port, mirror_port)
+    delete_mirror_flow_entries dpid, monitor_port, mirror_port
+    @mirror_patch[dpid].delete([monitor_port, mirror_port])
+  end
+```
+フローエントリを削除する`delete_mirror_flow_entries`プライベートメソッドを呼び出す。
+ミラーパッチ設定`@mirror_patch`にミラーパッチ情報を削除する。
+
+
+####delete_mirror_flow_entriesメソッド
+以下の`add_mirror_flow_entries`プライベートメソッドを用意する。
+```
+  def delete_mirror_flow_entries(dpid, monitor_port, mirror_port)
+    source_port = nil
+    flag = true;
+    @mirror_patch[dpid].each do |port_a, port_b|
+      if port_a == monitor_port && port_b == mirror_port then flag = false
+      end
+    end
+    if flag == true then return false
+    end
+    @patch[dpid].each do |port_c, port_d|
+      if port_c == monitor_port then source_port = port_d
+      elsif port_d == monitor_port then source_port = port_c
+      end
+    end
+    if source_port == nil then return false
+    end
+    send_flow_mod_delete(dpid, match: Match.new(in_port: source_port))
+    send_flow_mod_delete(dpid, match: Match.new(in_port: monitor_port))
+    send_flow_mod_add(dpid,
+                      match: Match.new(in_port: source_port),
+                      actions: SendOutPort.new(monitor_port))
+    send_flow_mod_add(dpid,
+                      match: Match.new(in_port: monitor_port),
+                      actions: SendOutPort.new(source_port))
+    return true
+  end
+```
+まずミラーパッチを探索し、削除するミラーリングリストが存在しなければfalseを返す。
+続いてモニターポートのパッチ情報を探索し、ミラーポートへのパケット転送を記述したフローエントリを削除した後、モニターポートをミラーリングされる前のフローエントリに戻す。
+
+### 実行結果
+実行結果を以下に示す。
+```
+ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ ./bin/patch_panel create 0xabc 1 2
+ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ ./bin/patch_panel create_mirror 0xabc 1 3
+ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ ./bin/patch_panel list 0xabc
+Port 1 is connected to port 2
+Monitor port:1, Mirror port:3
+ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ trema send_packets --source host1 --dest host2
+ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ trema send_packets --source host2 --dest host1
+ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ trema show_stats host1
+Packets sent:
+  192.168.0.1 -> 192.168.0.2 = 1 packet
+Packets received:
+  192.168.0.2 -> 192.168.0.1 = 1 packet
+ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ trema show_stats host2
+Packets sent:
+  192.168.0.2 -> 192.168.0.1 = 1 packet
+Packets received:
+  192.168.0.1 -> 192.168.0.2 = 1 packet
+ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ trema show_stats host3
+Packets received:
+  192.168.0.1 -> 192.168.0.2 = 1 packet
+  192.168.0.2 -> 192.168.0.1 = 1 packet
+ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ ./bin/patch_panel delete_mirror 0xabc 1 3
+ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ ./bin/patch_panel list 0xabc
+Port 1 is connected to port 2
+ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ trema send_packets --source host1 --dest host2
+ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ trema send_packets --source host2 --dest host1
+ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ trema show_stats host1Packets sent:
+  192.168.0.1 -> 192.168.0.2 = 2 packets
+Packets received:
+  192.168.0.2 -> 192.168.0.1 = 2 packets
+ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ trema show_stats host2
+Packets sent:
+  192.168.0.2 -> 192.168.0.1 = 2 packets
+Packets received:
+  192.168.0.1 -> 192.168.0.2 = 2 packets
+ensyuu2@ensyuu2-VirtualBox:~/patch-panel-Tatsu-Tanaka$ trema show_stats host3
+Packets received:
+  192.168.0.1 -> 192.168.0.2 = 1 packet
+  192.168.0.2 -> 192.168.0.1 = 1 packet
+```
+ポート1とポート2のパッチを追加後に、モニターポートを1、ミラーポートを3としてミラーリングを行い正しくミラーリングできていることを確認した。
+その後、実装したミラーリング解除のサブコマンドを入力し、ミラーリングを解除した後、host1とhost2でパケットの送受信を行いもともとミラーポートであったポート3に新たにパケットが届いていないことを確認した。
+
 
 ##参考文献
 デビッド・トーマス+アンドリュー・ハント(2001)「プログラミング Ruby」ピアソン・エデュケーション.  
